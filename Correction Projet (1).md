@@ -1,9 +1,9 @@
 # Ecole Nationale De Commerce Et gestion Settat (ENCGS)
 <img src="<img width="629" height="635" alt="téléchargement" src="https://github.com/user-attachments/assets/1c84ba91-3d88-45da-a557-93839d7b721d" />
 .jpg" style="height:464px;margin-right:432px"/>
-nom :JDIDOU TOURAYA 
-apogée :22006654
-groupe : CAC2
+# Jdidou Touraya 
+# 22006654
+# CAC 2
 <img src="WhatsApp Image 2024-09-02 à 19.02.12_1a8b3747.jpg" style="height:464px;margin-right:432px"/>
 
 ---
