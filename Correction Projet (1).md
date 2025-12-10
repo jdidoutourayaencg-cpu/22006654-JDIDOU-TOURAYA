@@ -1,5 +1,5 @@
 # Ecole Nationale De Commerce Et gestion Settat (ENCGS)
-<img src="<img width="629" height="635" alt="téléchargement" src="https://github.com/user-attachments/assets/1c84ba91-3d88-45da-a557-93839d7b721d" />
+ width="629" height="635" alt="téléchargement" 
 .jpg" style="height:464px;margin-right:432px"/>
 # Jdidou Touraya 
 # 22006654
