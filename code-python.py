@@ -1,123 +1,166 @@
-
-# 1. IMPORTATIONS 
-import pandas as pd
+# ==============================================================================
+# 1. IMPORTATION DES BIBLIOTHÈQUES
+# ==============================================================================
 import numpy as np
-import seaborn as sns
+import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
+
+import kagglehub
+from kagglehub import KaggleDatasetAdapter
+
+from sklearn.model_selection import train_test_split
+from sklearn.impute import SimpleImputer
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+
+sns.set_theme(style="whitegrid")
 import warnings
 warnings.filterwarnings('ignore')
 
-# 2. CHARGEMENT DONNÉES 
-student_df = pd.read_csv('Student-Stress-Factors.csv')
-student_df.head()
-
-# 3. INFO GÉNÉRALE
-student_df.info()
+print("1. Bibliothèques importées avec succès.\n")
 
 
-# 4. STATISTIQUES DESCRIPTIVES
-student_df.describe()
+# ==============================================================================
+# 2. CHARGEMENT DU DATASET KAGGLE
+# ==============================================================================
+print("2. Chargement du dataset Kaggle 'AI Index'...")
 
-# 5. VÉRIFICATION DOUBLONS 
-student_df.duplicated()
+# Listing files to identify the correct CSV file name
+import os
+dataset_path = '/kaggle/input/ai-index'
+print(f"Fichiers disponibles dans le dataset {dataset_path} :")
+for dirname, _, filenames in os.walk(dataset_path):
+    for filename in filenames:
+        print(os.path.join(dirname, filename))
+print("\n")
 
-# 6. NOMBRE VALEURS UNIQUES 
+file_path = "AI_index_db.csv"   # ⚠️ Mets le nom exact du fichier présent dans le dataset !!
 
-student_df.nunique()
+df = kagglehub.load_dataset(
+    KaggleDatasetAdapter.PANDAS,
+    "katerynameleshenko/ai-index",
+    file_path
+)
 
-# 7. MÉDIANES 
-student_df.median(numeric_only=True)
+print("   Données chargées avec succès !")
+print(f"   Taille du dataset : {df.shape}")
+print("\nAperçu :")
+print(df.head(), "\n")
 
-# 8. MODES 
-student_df.mode()
 
-# 9. MATRICE CORRÉLATION COMPLÈTE 
-student_df.corr(numeric_only=True)
+# ==============================================================================
+# 3. SIMULATION D’UNE CIBLE (Target) POUR LE MACHINE LEARNING
+# ==============================================================================
+print("3. Création d'une cible artificielle pour le Machine Learning...")
 
-# 10. CORRÉLATIONS STRESS TRIÉES 
-corr_matrix = student_df.corr(numeric_only=True)
-stress_corr = corr_matrix['How would you rate your stress levels?'].sort_values(ascending=False)
-stress_corr
+# Conversion de toutes les colonnes numériques uniquement
+df_numeric = df.select_dtypes(include=['float64', 'int64']).copy()
 
-# 11. HEATMAP CORRÉLATION 
-plt.figure(figsize=(10,8))
-sns.heatmap(student_df.corr(numeric_only=True), annot=True, cmap='coolwarm')
-plt.title('Matrice de corrélation')
+if df_numeric.shape[1] == 0:
+    raise ValueError("Aucune colonne numérique trouvée dans le dataset !")
+
+# On crée une target artificielle (1 si la 1ère colonne numérique > médiane)
+first_col = df_numeric.columns[0]
+df['target'] = (df_numeric[first_col] > df_numeric[first_col].median()).astype(int)
+
+print(f"   Variable cible créée à partir de : {first_col}\n")
+print(df[['target']].head())
+
+
+# ==============================================================================
+# 4. INTRODUCTION ARTIFICIELLE DE DONNÉES MANQUANTES
+# ==============================================================================
+print("4. Introduction artificielle de NaN dans 5% des données...")
+
+df_dirty = df.copy()
+for col in df_numeric.columns:
+    df_dirty.loc[df_dirty.sample(frac=0.05).index, col] = np.nan
+
+print(f"   Nombre total de NaN ajoutés : {df_dirty.isnull().sum().sum()}\n")
+
+
+# ==============================================================================
+# 5. NETTOYAGE ET PRÉPARATION DES DONNÉES
+# ==============================================================================
+print("5. Nettoyage & Imputation...")
+
+X = df_dirty.drop('target', axis=1)
+y = df_dirty['target']
+
+# Conserver uniquement les features numériques pour le modèle
+X = X.select_dtypes(include=['float64', 'int64'])
+
+imputer = SimpleImputer(strategy='mean')
+X_clean = pd.DataFrame(imputer.fit_transform(X), columns=X.columns)
+
+print("   Imputation terminée.")
+print(f"   NaN restants : {X_clean.isnull().sum().sum()}\n")
+
+
+# ==============================================================================
+# 6. ANALYSE EXPLORATOIRE DES DONNÉES (EDA)
+# ==============================================================================
+print("6. Analyse Exploratoire des Données...")
+
+print("\nStatistiques descriptives :")
+print(X_clean.describe().T)
+
+# Distribution de la target
+plt.figure(figsize=(6, 4))
+sns.countplot(x=y)
+plt.title("Distribution de la Cible (Artificial Target)")
 plt.show()
 
-# 12. BARPLOT SOMMEIL vs STRESS 
-# 
-sns.barplot(x='How would you rate your stress levels?', 
-            y='Kindly Rate your Sleep Quality 😴', 
-            data=student_df)
-
-# 13. AFFICHAGE DES DONNÉES 
-student_df
-
-# 14. DESCRIBE SUR SOUS-ENSEMBLE 
-student_df.iloc[:,1:].describe()
-
-# 15. AFFICHAGE CORRÉLATIONS 
-# 
-student_df.corr(numeric_only=True)
-
-
-# SCRIPT COMPLÈT EXÉCUTABLE
-"""
-SCRIPT COMPLET - Copie-colle direct dans Jupyter/Colab
-"""
-
-# Imports
-import pandas as pd
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
-import warnings
-warnings.filterwarnings('ignore')
-
-# Chargement
-df = pd.read_csv('Student-Stress-Factors.csv')
-
-print("SHAPE:", df.shape)
-print("\nINFO:")
-print(df.info())
-print("\nDESCRIBE:")
-print(df.describe())
-print("\nDOUBLONS:", df.duplicated().sum())
-print("\nNUNIQUE:")
-print(df.nunique())
-print("\nMÉDIANES:")
-print(df.median(numeric_only=True))
-print("\nCORRÉLATIONS STRESS:")
-print(df.corr(numeric_only=True)['How would you rate your stress levels?'].sort_values(ascending=False))
-
-# Visualisations
-plt.figure(figsize=(15,10))
-
-plt.subplot(2,2,1)
-sns.heatmap(df.corr(numeric_only=True), annot=True, cmap='coolwarm', center=0)
-plt.title('Heatmap Corrélations')
-
-plt.subplot(2,2,2)
-sns.barplot(data=df, x='How would you rate your stress levels?', 
-            y='Kindly Rate your Sleep Quality 😴')
-plt.title('Sommeil vs Stress')
-
-plt.subplot(2,2,3)
-sns.boxplot(data=df, x='How would you rate your stress levels?', 
-            y='how would you rate your study load?')
-plt.title('Charge travail vs Stress')
-
-plt.subplot(2,2,4)
-df['How would you rate your stress levels?'].hist()
-plt.title('Distribution Stress')
-
-plt.tight_layout()
+# Heatmap de corrélation
+plt.figure(figsize=(10, 8))
+sns.heatmap(X_clean.corr(), cmap='coolwarm')
+plt.title("Corrélation entre les variables")
 plt.show()
 
-print("\n✅ ANALYSE TERMINÉE - 15 cellules du notebook extraites!")
-print("\nRESULTATS CLÉS:")
-print("• Study Load → Stress: 0.34")
-print("• Sleep → Stress: 0.29")
-print("• Dataset propre: 53 obs, 0 doublons, 0 NaN")[attached_file:22]
 
+# ==============================================================================
+# 7. SÉPARATION DES DONNÉES (Train/Test)
+# ==============================================================================
+print("7. Séparation Train/Test...")
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X_clean, y, test_size=0.2, random_state=42
+)
+
+print(f"   Train : {X_train.shape[0]} échantillons")
+print(f"   Test  : {X_test.shape[0]} échantillons\n")
+
+
+# ==============================================================================
+# 8. MODÉLISATION (IA - RANDOM FOREST)
+# ==============================================================================
+print("8. Entraînement du modèle Random Forest...")
+
+model = RandomForestClassifier(n_estimators=150, random_state=42)
+model.fit(X_train, y_train)
+
+print("   Modèle entraîné avec succès.\n")
+
+
+# ==============================================================================
+# 9. ÉVALUATION DU MODÈLE
+# ==============================================================================
+print("9. Évaluation du modèle IA...")
+
+y_pred = model.predict(X_test)
+
+print(f"   Accuracy : {accuracy_score(y_test, y_pred)*100:.2f}%\n")
+
+print("   Rapport de classification :")
+print(classification_report(y_test, y_pred))
+
+# Matrice de confusion
+plt.figure(figsize=(6, 5))
+sns.heatmap(confusion_matrix(y_test, y_pred), annot=True, cmap='Blues', fmt='d')
+plt.title("Matrice de Confusion - Random Forest")
+plt.xlabel("Prédiction")
+plt.ylabel("Réalité")
+plt.show()
+
+print("\n--- FIN DU SCRIPT ---")
