@@ -8,198 +8,234 @@
 
 ---
 
-# 📘 GRAND GUIDE : ANATOMIE D'UN PROJET DATA SCIENCE
+# GRAND GUIDE : ANATOMIE D'UN PROJET DATA SCIENCE (adapté au dataset AI Index)
 
-Ce document décortique chaque étape du cycle de vie d'un projet de Machine Learning. Il est conçu pour passer du niveau "débutant qui copie du code" au niveau "ingénieur qui comprend les mécanismes internes".
+Ce document dissèque, étape par étape, un projet Data Science construit autour du dataset "AI Index" (katerynameleshenko/ai-index). L’objectif : passer d’une exploration initiale à une solution reproductible en mettant l’accent sur les choix méthodologiques, les pièges courants et les priorités métier.
 
----
+Remarque importante : je produis ce compte-rendu sans accès direct à ton fichier exact. Je me base sur la structure typique d’un dataset « AI Index » (indicateurs annuels/sectoriels : publications, brevets, investissements, effectifs, puissance de calcul, etc.) et sur le code que tu utilises pour charger les données. Je signale quand je fais une hypothèse.
 
-## 1. Le Contexte Métier et la Mission
+1. Contexte Métier et Mission
+Le Problème (Business Case)
 
-### Le Problème (Business Case)
-Dans le domaine médical, la fatigue des radiologues ou la complexité des images peuvent mener à des erreurs de diagnostic.
-*   **Objectif :** Créer un "Assistant IA" pour le second avis médical.
-*   **L'Enjeu critique :** La matrice des coûts d'erreur est asymétrique.
-    *   Dire à un patient sain qu'il est malade (Faux Positif) génère du stress et des coûts de biopsie.
-    *   Dire à un patient malade qu'il est sain (Faux Négatif) peut entraîner la mort par retard de traitement. **L'IA doit donc prioriser la sensibilité (Recall).**
+Les décideurs — universités, institutions publiques, entreprises — veulent mesurer l’évolution et l’impact de la recherche et de l’écosystème IA : croissance des publications, concentration des financements, progression de la capacité de calcul, répartition géographique des talents, etc.
 
-### Les Données (L'Input)
-Nous utilisons le *Breast Cancer Wisconsin Dataset*.
-*   **X (Features) :** 30 colonnes. Ce ne sont pas des pixels bruts, mais des caractéristiques mathématiques extraites d'images de cellules (Rayon moyen, Écart-type de la texture, "Pire" concavité, etc.).
-*   **y (Target) :** Binaire. `0` = Malin, `1` = Bénin.
+Objectif général : produire un tableau de bord et des modèles permettant de détecter tendances, anomalies, et signaux précoces (ex : explosion d’investissements, foyer de publications, hausse soudaine de brevets).
 
----
+Enjeu critique :
 
-## 2. Le Code Python (Laboratoire)
+Pour un policy maker : identifier des déséquilibres (concentration chez quelques acteurs) et évaluer le besoin d’interventions.
 
-Ce script est votre paillasse de laboratoire. Il contient toutes les manipulations nécessaires.
+Pour une entreprise : repérer opportunités (marchés émergents, talents).
+Les conséquences d’une mauvaise interprétation sont économiques et stratégiques : mauvaise allocation des ressources, décisions politiques inefficaces, investissements risqués.
 
-```python
+Les Données (L'Input) — hypothèses
+
+Dans ce type de dataset on trouve généralement :
+
+Variables temporelles : année, trimestre.
+
+Mesures d’activité : nombre de publications, citations, brevets, préprints.
+
+Mesures économiques : levées de fonds, montant d’investissements VC, financement public.
+
+Mesures d’infrastructure : quantité de GPU/TPU alloués, capacité de calcul estimée.
+
+Attributs géographiques/organisationnels : pays, institution, secteur (académie/industrie).
+
+Méta-données : sources, méthodologie de collecte.
+
+X (Features) : mélange numérique et catégoriel (comptages, montants, ratios).
+y (Target) : souvent absent — tâche principale = analyse descriptive, détection de tendance, clustering, séries temporelles. Si on veut du supervised learning, il faudra créer une cible (ex : "croissance élevée" ou "zone à risque").
+
+2. Le Code Python (Laboratoire) — squelette adapté
+
+Voici un script épuré (à adapter au nom du fichier dans le dataset). Il suit les mêmes phases que ton exemple pédagogique.
+
+# 1. IMPORT
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.datasets import load_breast_cancer
+import kagglehub
+from kagglehub import KaggleDatasetAdapter
+
 from sklearn.model_selection import train_test_split
 from sklearn.impute import SimpleImputer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
-# Configuration
 sns.set_theme(style="whitegrid")
 import warnings
 warnings.filterwarnings('ignore')
 
-# --- PHASE 1 : ACQUISITION & SIMULATION ---
-data = load_breast_cancer()
-df = pd.DataFrame(data.data, columns=data.feature_names)
-df['target'] = data.target
+# 2. CHARGEMENT
+file_path = "AI Index.csv"  # ← mettre le nom exact
+df = kagglehub.load_dataset(KaggleDatasetAdapter.PANDAS, "katerynameleshenko/ai-index", file_path)
+print(df.shape, df.columns)
+print(df.head())
 
-# Simulation de la réalité (Données sales)
-np.random.seed(42)
-df_dirty = df.copy()
-# On corrompt 5% des données avec des NaN
-for col in df.columns[:-1]:
-    df_dirty.loc[df_dirty.sample(frac=0.05).index, col] = np.nan
+# 3. EXPLORATION RAPIDE
+print(df.info())
+print(df.describe())
 
-# --- PHASE 2 : DATA WRANGLING (NETTOYAGE) ---
-X = df_dirty.drop('target', axis=1)
-y = df_dirty['target']
+# 4. PREPROCESSING (exemples)
+# - conversion date
+if 'Year' in df.columns:
+    df['Year'] = pd.to_datetime(df['Year'], format='%Y')
 
-# Stratégie d'imputation
+# - sélectionner numériques
+num_cols = df.select_dtypes(include=['float64','int64']).columns.tolist()
+
+# - imputer (ex : 5% NaN simulation si souhaité)
+from sklearn.impute import SimpleImputer
 imputer = SimpleImputer(strategy='mean')
-# fit = apprend la moyenne, transform = bouche les trous
-X_imputed = imputer.fit_transform(X)
-X_clean = pd.DataFrame(X_imputed, columns=X.columns)
+df[num_cols] = imputer.fit_transform(df[num_cols])
 
-# --- PHASE 3 : ANALYSE EXPLORATOIRE (EDA) ---
-print("--- Statistiques Descriptives ---")
-print(X_clean.iloc[:, :5].describe())
+# 5. Si besoin de target (ex : croissance > médiane -> classification)
+# WARNING : créer une target docteur-sceptique (expliciter le délai et la définition)
+df['target_growth'] = (df['some_indicator'].pct_change() > df['some_indicator'].pct_change().median()).astype(int)
 
-# --- PHASE 4 : PROTOCOLE EXPÉRIMENTAL (SPLIT) ---
-X_train, X_test, y_train, y_test = train_test_split(
-    X_clean, y, test_size=0.2, random_state=42
-)
-
-# --- PHASE 5 : INTELLIGENCE ARTIFICIELLE (RANDOM FOREST) ---
+# 6. Split / Model (exemple RandomForest)
+X = df[num_cols].dropna()
+y = df['target_growth'].loc[X.index]
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 model = RandomForestClassifier(n_estimators=100, random_state=42)
 model.fit(X_train, y_train)
-
-# --- PHASE 6 : AUDIT DE PERFORMANCE ---
 y_pred = model.predict(X_test)
+print("Accuracy:", accuracy_score(y_test, y_pred))
+print(classification_report(y_test, y_pred))
 
-print(f"\n--- Accuracy Globale : {accuracy_score(y_test, y_pred)*100:.2f}% ---")
-print("\n--- Rapport Détaillé ---")
-print(classification_report(y_test, y_pred, target_names=data.target_names))
+3. Analyse Approfondie : Nettoyage (Data Wrangling)
+Le Problème du « vide » (NaN) et des séries temporelles
 
-# Visualisation des erreurs
-plt.figure(figsize=(6, 5))
-sns.heatmap(confusion_matrix(y_test, y_pred), annot=True, fmt='d', cmap='Blues')
-plt.title('Matrice de Confusion : Réalité vs IA')
-plt.ylabel('Vraie Classe')
-plt.xlabel('Classe Prédite')
-plt.show()
-```
+Les colonnes financières ou de comptage peuvent contenir des ruptures et des zéros valides. Il faut distinguer 0 réel et NaN manquant.
 
----
+Les séries temporelles exigent un alignement (par année/institution/pays). Des données manquantes pourraient signifier absence réelle d’activité (0) ou simplement non-report.
 
-## 3. Analyse Approfondie : Nettoyage (Data Wrangling)
+Stratégies d’imputation recommandées
 
-### Le Problème Mathématique du "Vide"
-Les algorithmes d'algèbre linéaire (qui calculent des distances entre points) ne peuvent pas gérer la valeur `NaN` (Not a Number). Une seule valeur manquante peut faire planter tout le calcul matriciel.
+Imputation simple (moyenne/median) — OK pour un prototype, mais attention au data leakage :
 
-### La Mécanique de l'Imputation
-Nous utilisons `SimpleImputer(strategy='mean')`.
-1.  **L'Apprentissage (`fit`) :** L'imputer scanne la colonne "Rayon" de tous les patients disponibles. Il calcule $\mu$ (la moyenne), disons 14.12mm. Il stocke cette valeur en mémoire.
-2.  **La Transformation (`transform`) :** Il repasse sur les données. S'il voit un trou, il injecte 14.12mm.
+Ne jamais calculer l’imputer (moyenne) sur l’ensemble si tu vas ensuite évaluer sur un jeu test : séparer d’abord.
 
-### 💡 Le Coin de l'Expert (Data Leakage)
-*Attention :* Dans ce script pédagogique, nous avons nettoyé *avant* de séparer (Train/Test). Dans un système industriel ultra-rigoureux, c'est une erreur subtile appelée **Data Leakage** (Fuite de données).
-*   *Pourquoi ?* En calculant la moyenne sur tout le monde, la moyenne inclut des infos du futur Test Set.
-*   *La bonne pratique absolue :* Séparer d'abord, calculer la moyenne sur le Train, et utiliser cette moyenne "Train" pour boucher les trous du Test.
+Imputation temporelle : forward/backward fill pour séries temporelles d’un même pays/institution.
 
----
+Modèles d’imputation : KNN imputer, modèles basés sur séries temporelles (ARIMA/ETS) pour prédire valeurs manquantes historiquement.
 
-## 4. Analyse Approfondie : Exploration (EDA)
+Le coin de l’expert
 
-C'est l'étape de "Profilage".
+Pour indicateurs financiers (levées), préfère la méthode robuste (median) en présence d’outliers extrêmes.
 
-### Décrypter `.describe()`
-*   **Mean (Moyenne) vs 50% (Médiane) :** Comparez ces deux lignes. Si la Moyenne est beaucoup plus haute que la Médiane, cela indique une **distribution asymétrique** (skewed) tirée vers le haut par des valeurs extrêmes.
-*   **Std (Écart-type) :** Mesure la "largeur" de la cloche de distribution. Une variable avec un std proche de 0 est inutile (c'est une constante).
+Garde une colonne flag_missing_ par variable importante : utile pour le modèle (indique qu'une valeur était manquante).
 
-### La Multicollinéarité (Le problème de la redondance)
-En regardant une Heatmap, on verrait que `Radius` (Rayon), `Perimeter` (Périmètre) et `Area` (Aire) sont corrélés à >99%.
-*   *Géométriquement :* C'est logique ($P = 2\pi R$).
-*   *Impact ML :* Pour un Random Forest, ce n'est pas grave. Mais pour une Régression Logistique, cela rendrait le modèle instable car il ne saurait pas à quelle variable attribuer le "poids" de la décision.
+4. Analyse Approfondie : Exploration (EDA)
+Profiling et questions clés
 
----
+Tendances temporelles : la série croît-elle linéairement, exponentiellement, ou par paliers ?
 
-## 5. Analyse Approfondie : Méthodologie (Split)
+Saisonnalité : pour des données trimestrielles, y a-t-il des motifs récurrents ?
 
-### Le Concept : La Garantie de Généralisation
-Le but du Machine Learning n'est pas de *mémoriser* le passé, mais de *généraliser* vers le futur.
+Concentration : la distribution des investissements est-elle très inégale (Gini élevé) ?
 
-### Les Paramètres sous le capot
-`train_test_split(test_size=0.2, random_state=42)`
-1.  **Le Ratio 80/20 (Le principe de Pareto) :** On garde la majorité des données pour que le modèle puisse capturer la complexité des motifs (Train). On en garde juste assez (Test) pour que la note finale soit statistiquement significative.
-2.  **La Reproductibilité (`random_state`) :** En informatique, le "vrai" hasard n'existe pas. C'est du pseudo-aléatoire. Fixer la graine à 42 assure que si vous envoyez votre code à un collègue au Japon, il obtiendra *exactement* les mêmes patients dans son jeu de test. C'est crucial pour la validation scientifique.
+Corrélations : publications vs citations vs brevets vs financement — quels liens ?
 
----
+Interpréter .describe() efficacement
 
-## 6. FOCUS THÉORIQUE : L'Algorithme Random Forest 🌲
+Mean vs Median : distance → skew. Les montants d'investissement sont souvent très skewed.
 
-Pourquoi est-ce l'algorithme "couteau suisse" préféré des Data Scientists ?
+Std : variables à variance nulle ou quasi-nulle peuvent être supprimées.
 
-### A. La Faiblesse de l'Individu (Arbre de Décision)
-Un Arbre de Décision unique pose des questions en cascade.
-*   *Problème :* Il est **obsessif**. Si, dans vos données d'entraînement, il y a une aberration (un patient sain avec un rayon énorme), l'arbre va créer une règle spécifique pour lui. Il apprend le bruit. On dit qu'il a une **haute variance**.
+Outliers : boxplots par pays/institution pour repérer « whales » (acteurs dominants).
 
-### B. La Force du Groupe (Bagging)
-Random Forest signifie "Forêt Aléatoire". Il crée 100 arbres (ou plus). Pour qu'ils ne soient pas tous identiques, on introduit du chaos contrôlé à deux niveaux :
+Multicolinéarité
 
-1.  **Le Bootstrapping (Diversité des Éleves) :**
-    *   Chaque arbre ne voit pas tout le monde. L'Arbre #1 s'entraîne sur les patients A, B, C. L'Arbre #2 sur A, C, D.
-    *   *Conséquence :* Chaque arbre développe une "opinion" basée sur une expérience différente.
+Attends-toi à des corrélations fortes (ex : nombre de publications et citations). Pour des modèles linéaires, appliquer PCA ou sélectionner features. Pour Random Forest, moins critique.
 
-2.  **Feature Randomness (Diversité des Questions) :**
-    *   C'est la magie du Random Forest. À chaque fois qu'un arbre veut poser une question pour séparer les malades des sains, il n'a accès qu'à un sous-ensemble aléatoire de colonnes (ex: $\sqrt{nb\_colonnes}$).
-    *   *Conséquence :* Cela force les arbres à regarder des variables moins évidentes (comme la texture ou la symétrie) au lieu de se focaliser uniquement sur le rayon.
+5. Méthodologie : Split et Séries Temporelles
+Cas d’usage et protocole
 
-### C. Le Consensus (Vote)
-Lorsqu'un nouveau patient arrive :
-*   Les 100 arbres font leur diagnostic individuellement.
-*   On fait un vote à la majorité.
-*   Les erreurs individuelles des arbres (bruit) s'annulent mathématiquement, ne laissant que la tendance lourde (le signal).
+Si tu fais de la prédiction temporelle (prévoir le montant d’investissements en t+1), ne pas faire de random shuffle : utiliser un split chronologique (train = années ≤ 2019, test = 2020+).
 
----
+Si tu fais classification cross-sectional (prévoir si une institution aura forte croissance l’année suivante), alors train_test_split aléatoire peut être acceptable si tu contrôles la fuite d’information temporelle (feature leakage).
 
-## 7. Analyse Approfondie : Évaluation (L'Heure de Vérité)
+Paramètres pratiques
 
-Comment lire les résultats comme un pro ?
+test_size=0.2, random_state=42 : bonne pratique pour reproductibilité.
 
-### A. La Matrice de Confusion (Quadrants)
-*   **Vrais Positifs (TP) :** *Prédit Cancer | Réel Cancer.* (Succès).
-*   **Vrais Négatifs (TN) :** *Prédit Sain | Réel Sain.* (Succès).
-*   **Faux Positifs (FP - Erreur de Type I) :** *Prédit Cancer | Réel Sain.*
-    *   *Impact :* Stress psychologique, coût.
-*   **Faux Négatifs (FN - Erreur de Type II) :** *Prédit Sain | Réel Cancer.*
-    *   *Impact :* **Danger de mort.** C'est la métrique à surveiller absolument ici.
+Pour séries : validation par rolling window / time series cross validation (expanding window).
 
-### B. Les Métriques Avancées
-L'Accuracy (Précision globale) est dangereuse si les classes sont déséquilibrées (ex: 99% de sains).
-On regarde donc :
+6. Focus Théorique : Choix d’algorithmes
+Que choisir selon l’objectif ?
 
-1.  **La Précision (Precision) :** "Qualité de l'alarme".
-    $$TP / (TP + FP)$$
-    *   Si elle est basse, l'IA crie "Au loup !" trop souvent pour rien.
+Exploration / insight (non-supervisé) : clustering (KMeans, DBSCAN) pour regrouper pays/institutions ; PCA pour réduire la dimension.
 
-2.  **Le Rappel (Recall / Sensibilité) :** "Puissance du filet".
-    $$TP / (TP + FN)$$
-    *   Si elle est basse (ex: 0.60), l'IA laisse passer 40% des cancers. **Inacceptable en médecine.**
-    *   *Objectif pro :* Maximiser le Recall, quitte à accepter un peu plus de Faux Positifs.
+Prévision (séries temporelles) : ARIMA, Prophet, modèles LSTM/Temporal Fusion pour signaux complexes.
 
-3.  **F1-Score :** La moyenne harmonique des deux précédents. C'est la note unique la plus honnête pour comparer deux modèles.
+Classification (signal binaire créé) : RandomForest, Gradient Boosting (XGBoost/LightGBM). RandomForest est robuste aux outliers et multicolinéarité ; idéal pour un premier benchmark.
 
-### Conclusion du Projet
-Ce rapport montre que la Data Science ne s'arrête pas à `model.fit()`. C'est une chaîne de décisions logiques où la compréhension du métier (médecine) dicte le choix des algorithmes (Random Forest pour la robustesse) et des métriques (Recall pour la sécurité).
+Interprétabilité : si tu dois expliquer aux décideurs, préférer modèles simples (logistic regression + shap/feature importances) ou utiliser SHAP/LIME sur modèles complexes.
+
+Pourquoi Random Forest est un bon point de départ
+
+Gère bien mélanges de variables.
+
+Peu de pré-traitements requis.
+
+Importance features fournie directement.
+
+Bon pour baseline robuste avant tuning.
+
+7. Analyse Approfondie : Évaluation
+Matrice de confusion — adaptation métier
+
+Si target = risque/promotion/forte croissance, les faux négatifs (ne pas détecter une zone à forte croissance) peuvent coûter opportunités manquées. Selon l’usage, prioriser Recall (sensibilité) ou Precision.
+
+Pour prévision monétaire, regarder MAE/MAPE/RMSE plutôt que accuracy.
+
+Métriques à privilégier
+
+Classification déséquilibrée : Precision, Recall, F1, AUC-ROC.
+
+Séries/Regression : MAE (robuste), RMSE (pénalise gros écarts), MAPE (sensible aux zéros).
+
+Business metric : perte économique simulée (ex : coût faux positif vs faux négatif).
+
+8. Recommandations Opérationnelles & Bonnes Pratiques
+
+Documenter les sources : proviennent-elles de publications, bases publiques, rapports financiers ? Tenir la traçabilité.
+
+Séparer d’abord, imputer ensuite : éviter le data leakage.
+
+Garder des flags de missingness : parfois l’absence d’un rapport est signal.
+
+Versionner les données et le code : DVC/Git + environnements (requirements.txt / conda).
+
+Automatiser la surveillance : pipelines ETL + tests de qualité (contrôle de drift).
+
+Interprétabilité : fournir SHAP plots et rapports simples aux non-techniques.
+
+Validations robustes : cross-validation temporelle pour séries, tests d'out-of-time.
+
+9. Cas Pratique : Exemple d’Interprétation (scénarios)
+
+Détection d’alerte : si une région montre +200% d’investissements en R&D sur 1 an, vérifier source (acquisition, nouveau fonds) avant politique publique.
+
+Concentration : si top 5 institutions attirent 80% des brevets, envisager politiques de redistribution (subventions, bourses).
+
+Risque de données : changement de méthodologie de collecte d’année à année provoque des ruptures artificielles — ajuster pour comparabilité.
+
+10. Conclusion synthétique
+
+Le dataset AI Index est d’abord une source stratégique : son rôle principal est descriptif et décisionnel. La Data Science pour ce cas d’usage privilégie l’exploration, la détection de tendances, et les analyses de concentration plutôt que la seule compétition de modèles supervisés.
+
+Points clés à retenir :
+
+Clarifier la question métier avant de créer une target artificielle.
+
+Traiter les séries temporelles correctement (split chronologique, imputation temporelle).
+
+Documenter les choix et exposer l’incertitude (intervalle, scénario).
+
+Commencer par des baselines robustes (Random Forest pour classification, MAE pour régression) puis complexifier si le gain est démontrable.
+
+Préparer des livrables actionnables : dashboard clair, rapport d’anomalies, recommandations politiques/stratégiques.
